@@ -1,15 +1,27 @@
 Archive-Tar-Stream
 
-The README is used to introduce the module and provide instructions on
-how to install the module, any machine dependencies it may have (for
-example C compilers and installed libraries) and any other information
-that should be provided before the module is installed.
+This module was previously known as ME::TarStream and created
+as part of the backup system at FastMail.FM a few years ago.
+The first commit was Tue Feb 20 03:21:43 2007 +0000
 
-A README file is required for CPAN modules since CPAN extracts the README
-file from a module distribution so that people browsing the archive
-can use it to get an idea of the module's uses. It is usually a good idea
-to provide version information here so that people can decide whether
-fixes for the module are worth downloading.
+
+RATIONALE
+
+Why this instead of just using gnu tar, or any of the other
+Archive:: packages?  In a word, IO.  Actually that's two
+words if you unpack the acronym.
+
+Unpacking a tar file in order to remove some parts and then
+re-pack it causes a lot of IO.  Particularly for the unlink
+afterwards.  Working in tmpfs is OK, until your files get
+big.
+
+We needed to repack incremental backups of up to 100Gb of
+emails, one file per email.  Starting with a .tar.gz, and
+ending with a .tar.gz.  Hence something that could sit in
+a pipe like this:
+
+zcat old.tar.gz | ./decider | gzip > new.tar.gz
 
 
 INSTALLATION
