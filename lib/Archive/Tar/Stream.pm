@@ -567,6 +567,7 @@ in %extra to make sure they're all known keys.
 
 sub BlankHeader {
   my $Self = shift;
+
   my %hash = (
     name => '',
     mode => 0777,
@@ -582,6 +583,7 @@ sub BlankHeader {
     devminor => 0,
     prefix => '',
   );
+
   my %overrides = @_;
   foreach my $key (keys %overrides) {
     if (exists $hash{$key}) {
@@ -765,6 +767,46 @@ sub CopyFromFh {
   }
 }
 
+=head1 TARHEADER format
+
+This is the "BlankHeader" output, which includes all the fields
+in a standard tar header:
+
+  my %hash = (
+    name => '',
+    mode => 0777,
+    uid => 0,
+    gid => 0,
+    size => 0,
+    mtime => time(),
+    typeflag => '0', # this is actually the STANDARD plain file format, phooey.  Not 'f' like Tar writes
+    linkname => '',
+    uname => '',
+    gname => '',
+    devmajor => 0,
+    devminor => 0,
+    prefix => '',
+  );
+
+You can read more about the tar header format produced by this
+module on wikipedia:
+L<http://en.wikipedia.org/wiki/Tar_(file_format)#UStar_format>
+or here: L<http://www.mkssoftware.com/docs/man4/tar.4.asp>
+
+Type flags:
+
+  '0' Normal file
+  (ASCII NUL) Normal file (now obsolete)
+  '1' Hard link
+  '2' Symbolic link
+  '3' Character special
+  '4' Block special
+  '5' Directory
+  '6' FIFO
+  '7' Contiguous file
+
+Obviously some module wrote 'f' as the type - I must have found
+that during original testing.  That's bogus though.
 
 =head1 AUTHOR
 
