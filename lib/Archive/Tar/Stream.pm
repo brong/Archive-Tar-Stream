@@ -231,6 +231,7 @@ The action can be:
    KEEP - copy this file as is (possibly changed header) to output tar
    EDIT - re-call $Chooser with filehandle
    SKIP - skip over the file and call $Chooser on the next one
+   EXIT - skip and also stop further processing
 
 EDIT mode:
 
@@ -263,6 +264,7 @@ sub StreamCopy {
 
   while (my $header = $Self->ReadHeader()) {
     my $pos = $header->{_pos};
+    my $oldsize = $header->{size};
     if ($Chooser) {
       my ($rc, $newheader) = $Chooser->($header, $Self->{outpos}, undef);
 
@@ -286,16 +288,19 @@ sub StreamCopy {
 
       if ($rc eq 'KEEP') {
         print "KEEP $header->{name} $pos/$Self->{outpos}\n" if $VERBOSE;
-        $Self->WriteHeader($header);
         if ($TempFile) {
+          $Self->WriteHeader($header);
           $Self->CopyFromFh($TempFile, $header->{size});
         }
-        # guarantee safety by getting everything into a temporary file first
-        elsif ($Self->{safe_copy}) {
-          $TempFile = $Self->CopyToTempFile($header->{size});
+        # if the sizes don't match we just do a tempfile too
+        elsif ($Self->{safe_copy} or ($oldsize != $header->{size})) {
+          # guarantee safety by getting everything into a temporary file first
+          $TempFile = $Self->CopyToTempFile($oldsize);
+          $Self->WriteHeader($header);
           $Self->CopyFromFh($TempFile, $header->{size});
         }
         else {
+          $Self->WriteHeader($header);
           $Self->CopyBytes($header->{size});
         }
       }
@@ -318,14 +323,16 @@ sub StreamCopy {
     }
     else {
       print "PASSTHROUGH $header->{name} $Self->{outpos}\n" if $VERBOSE;
-      # XXX - faster but less safe
-      #$Self->WriteHeader($header);
-      #$Self->CopyBytes($header->{size});
 
-      # slow safe option :)
-      my $TempFile = $Self->CopyToTempFile($header->{size});
-      $Self->WriteHeader($header);
-      $Self->CopyFromFh($TempFile, $header->{size});
+      if ($Self->{safe_copy}) {
+        my $TempFile = $Self->CopyToTempFile($header->{size});
+        $Self->WriteHeader($header);
+        $Self->CopyFromFh($TempFile, $header->{size});
+      }
+      else {
+        $Self->WriteHeader($header);
+        $Self->CopyBytes($header->{size});
+      }
     }
   }
 }
