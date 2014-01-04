@@ -4,7 +4,7 @@ use Test::More tests => 8;
 use IO::Scalar;
 
 use File::Temp;
-use Digest::SHA1;
+use Digest::SHA;
 
 BEGIN {
     use_ok( 'Archive::Tar::Stream' ) || print "Bail out!\n";
@@ -31,7 +31,7 @@ foreach my $name (sort keys %files) {
 
 is($ts->OutPos(), 512 * 7, "Output Size");
 
-my $sha1 = Digest::SHA1->new();
+my $sha1 = Digest::SHA->new(1);
 $tarfile->seek(0, 0);
 $sha1->addfile($tarfile);
 
@@ -43,7 +43,7 @@ my $ts2 = Archive::Tar::Stream->new(infh => $tarfile, outfh => $tar2);
 
 $ts2->StreamCopy(sub { return 'KEEP' });
 
-my $sha2 = Digest::SHA1->new();
+my $sha2 = Digest::SHA->new(1);
 $tar2->seek(0, 0);
 $sha2->addfile($tar2);
 
