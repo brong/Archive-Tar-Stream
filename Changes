@@ -4,3 +4,5 @@ Revision history for Archive-Tar-Stream
         - Packaged up initial ME::TarStream code from FastMail
         - Added basic tests and documentation
 
+0.02    Sat Jan  4 14:59:10 EST 2014
+        - [rt.cpan.org #91796] added missing typeflag to AddLink
