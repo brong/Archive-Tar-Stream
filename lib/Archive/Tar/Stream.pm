@@ -206,6 +206,7 @@ sub AddLink {
   my $header = $Self->BlankHeader(@_);
   $header->{name} = $name;
   $header->{linkname} = $linkname;
+  $header->{typeflag} = 2;
 
   return $Self->WriteHeader($header);
 }
