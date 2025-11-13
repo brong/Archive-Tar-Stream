@@ -8,7 +8,7 @@ WriteMakefile1(
     AUTHOR              => q{Bron Gondwana <perlcode@brong.net>},
     VERSION_FROM        => 'lib/Archive/Tar/Stream.pm',
     ABSTRACT_FROM       => 'lib/Archive/Tar/Stream.pm',
-    'LICENSE'           => 'perl'
+    'LICENSE'           => 'perl',
     PL_FILES            => {},
     MIN_PERL_VERSION => '5.006',
     META_MERGE => {
@@ -18,6 +18,7 @@ WriteMakefile1(
     },
     PREREQ_PM => {
         'File::Temp' => 0,
+        'List::Util' => 0,
     },
     TEST_REQUIRES => {
         'Test::More' => 0,
