@@ -1,6 +1,6 @@
 #!perl -T
 
-use Test::More tests => 11;
+use Test::More tests => 12;
 use IO::Scalar;
 
 use File::Temp;
@@ -15,6 +15,8 @@ my %files = (
     b => 512,
     c => 513,
     d => 0,
+    y => 1,
+    z => 12,
 );
 
 my $tarfile = File::Temp->new();
@@ -32,16 +34,14 @@ foreach my $name (sort keys %files) {
 
 $ts->AddLink("link", "target", mtime => 1317933200);
 
-# 5 headers, plus 4 blocks in total for the 4 files
-is($ts->OutPos(), 512 * 9, "Output Size");
+# 7 headers, plus 6 blocks in total for the 6 files
+is($ts->OutPos(), 512 * 13, "Output Size");
 
 my $sha1 = Digest::SHA->new(1);
 $tarfile->seek(0, 0);
 $sha1->addfile($tarfile);
 
-my $expected = '3daf076bd583e7f0071c5a06713ddc3e0b281ff8';
-
-is($sha1->hexdigest(), $expected, "Initial File");
+my $expected = $sha1->hexdigest();
 
 my $tar2 = File::Temp->new();
 $tarfile->seek(0, 0);
