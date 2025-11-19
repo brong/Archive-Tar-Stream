@@ -795,19 +795,23 @@ sub WriteCopy {
 
   my $pos = $Self->{outpos};
 
-  my $block = $Self->CreateHeader($header);
-  my $hn = 1;
+  my $toread = $header->{size};
 
-  my $bytes = $header->{size};
-  while ($hn || $bytes > 0) {
-    my $n = min(1 + int(($bytes-1) / BLOCKSIZE), BLOCKCOUNT);
-    my $dump = $n ? $Self->ReadBlocks($n) : '';
-    die "Failed to read $n blocks for $bytes at $Self->{inpos}\n" unless defined $dump;
-    $Self->WriteBlocks($block . $dump, $hn + $n);
-    $bytes -= length($dump);
-    # only write header on the first time;
-    $block = '';
-    $hn = 0;
+  my $blocks = $Self->CreateHeader($header);
+  my $count = 1;
+
+  while ($count || $toread > 0) {
+    if ($toread) {
+      my $n = min(1 + int(($toread-1) / BLOCKSIZE), BLOCKCOUNT-$count);
+      my $dump = $Self->ReadBlocks($n);
+      die "Failed to read $n blocks for $toread at $Self->{inpos}\n" unless defined $dump;
+      $blocks .= $dump;
+      $count += $n;
+      $toread -= length($dump);
+    }
+    $Self->WriteBlocks($blocks, $count);
+    $blocks = '';
+    $count = 0;
   }
 
   return( {%$header, _pos => $pos} );
