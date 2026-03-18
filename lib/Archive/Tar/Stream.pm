@@ -630,8 +630,7 @@ sub CopyBytes {
   my $bytes = shift;
   my $buf;
   while ($bytes > 0) {
-    my $n = int($bytes / BLOCKSIZE);
-    $n = 16  if $n > 16;
+    my $n = min(1 + int(($bytes-1) / BLOCKSIZE), BLOCKCOUNT);
     my $dump = $Self->ReadBlocks($n);
     $Self->WriteBlocks($dump, $n);
     $bytes -= length($dump);
