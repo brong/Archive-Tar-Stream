@@ -196,7 +196,7 @@ sub AddLink {
   my $name = shift;
   my $linkname = shift;
 
-  my $header = $Self->BlankHeader(typeflag => 2, @_, name => $name, linkname => $linkname);
+  my $header = $Self->BlankHeader(typeflag => '2', @_, name => $name, linkname => $linkname);
 
   return $Self->WriteHeader($header);
 }
