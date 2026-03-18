@@ -505,7 +505,7 @@ sub ParseHeader {
   my $chksum = oct($items[6]);
   # do checksum
   substr($block, 148, 8) = "        ";
-  unless (unpack("%16C*", $block) == $chksum) {
+  unless (unpack("%32C*", $block) == $chksum) {
     return;
   }
 
@@ -603,7 +603,7 @@ sub CreateHeader {
   );
 
   # calculate checksum
-  my $checksum = sprintf("%06o", unpack("%16C*", $block));
+  my $checksum = sprintf("%06o", unpack("%32C*", $block));
   substr($block, 148, 8) = $checksum . "\0 ";
 
   # pad out to BLOCKSIZE characters
