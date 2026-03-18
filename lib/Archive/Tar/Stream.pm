@@ -662,7 +662,7 @@ sub CreateHeader {
     "        ",                  # chksum
     $header->{typeflag},
     $header->{linkname},
-    "ustar  \0",                   # magic
+    "ustar\00000",                  # magic + version (POSIX ustar)
     $header->{uname},
     $header->{gname},
     sprintf("%07o", $header->{devmajor}),
