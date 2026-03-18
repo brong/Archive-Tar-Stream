@@ -1,5 +1,17 @@
 Revision history for Archive-Tar-Stream
 
+0.06    Wed Mar 18 10:18:29 CST 2026
+        - Add transparent GNU long filename/linkname (L/K) support
+        - Write POSIX ustar magic instead of GNU tar magic
+        - Fix CopyBytes: use ceiling division and BLOCKCOUNT cap (128x perf)
+        - Respect safe_copy setting in StreamCopy passthrough mode
+        - Use %32C* for checksum to avoid theoretical 16-bit overflow
+        - Write 2 zero blocks in FinishTar per POSIX spec (was 5)
+        - Make verbose an OO attribute (backward-compatible with $VERBOSE)
+        - Fix AddLink typeflag to use string '2' consistently
+        - Fix WriteHeader POD (was copy-pasted from ReadHeader)
+        - Add gtar and bsdtar compatibility tests
+
 0.05    Wed Nov 19 18:18:44 EST 2025
         - Fix a thinko in the zero byte file copying (the test just happened
           to not catch it)
