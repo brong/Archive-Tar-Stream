@@ -48,7 +48,9 @@ use separate cores.
 
     use Archive::Tar::Stream;
 
-    my $ts = Archive::Tar::Stream->new(outfh => $fh);
+    # add a file to a new tar
+    my $ts = Archive::Tar::Stream->new(outfh => $outfh);
+    open my $fh, '<', $path or die;
     $ts->AddFile($name, -s $fh, $fh);
 
     # remove large non-jpeg files from a tar.gz
@@ -63,7 +65,7 @@ use separate cores.
         # and any other jpegs
         return 'KEEP' if $header->{name} =~ m/\.jpg$/i;
 
-        # no, seriously
+        # need to see the content to decide
         return 'EDIT' unless $fh;
 
         return 'KEEP' if mimetype_of_filehandle($fh) eq 'image/jpeg';
@@ -84,7 +86,8 @@ Args:
    outfh     - filehandle to write to
    inpos     - initial offset in infh
    outpos    - initial offset in outfh
-   safe_copy - boolean.
+   safe_copy - boolean (default: 1)
+   verbose   - boolean (default: 0)
 
 Offsets are for informational purposes only, but can be
 useful if you are tracking offsets of items within your
@@ -92,12 +95,28 @@ tar files separately.  All read and write functions
 update these offsets.  If you don't provide offsets, they
 will default to zero.
 
-Safe Copy is the default - you have to explicitly turn it
-off.  If Safe Copy is set, every file is first extracted
-from the input filehandle and stored in a temporary file
-before appending to the output filehandle.  This uses
-slightly more IO, but guarantees that a truncated input
-file will not corrupt the output file.
+B<safe_copy> is enabled by default.  When set, every file
+being copied from the input stream is first written to a
+temporary file before being appended to the output.  This
+protects the output tar from corruption if the input is
+truncated mid-file: without safe_copy, a truncated input
+could leave a partial record in the output (a header
+promising N bytes followed by fewer bytes of data), which
+is a corrupt tar file.  With safe_copy, the module will
+die before writing anything to the output, leaving it
+valid up to the last complete record.
+
+The cost is significant: every file's data is written to
+disk twice (once to the temp file, once to output).  For
+large archives this doubles the IO.  If your input is
+reliable (e.g. a local file, not a pipe), or if you don't
+need the output to be valid on partial failure, disable it
+with C<< safe_copy => 0 >>.
+
+B<verbose> enables diagnostic output to STDOUT showing
+KEEP/SKIP/DISCARD decisions during StreamCopy.  The
+package global C<$Archive::Tar::Stream::VERBOSE> is also
+supported for backward compatibility.
 
 =cut
 
@@ -215,36 +234,51 @@ Optional: outfh - required if you return 'KEEP'
         return 'KEEP';
     });
 
+GNU long filename and long linkname extensions (typeflag
+C<L> and C<K>) are handled transparently: the callback
+receives a single header with the full name already
+applied.  On the write side, C<L>/C<K> entries are emitted
+automatically when needed.  You can freely rename files
+to longer or shorter names in the callback and the right
+thing happens.
+
 The chooser function can either return a single 'action' or
 a tuple of action and a new header.
 
 The action can be:
+
    KEEP - copy this file as is (possibly changed header) to output tar
    EDIT - re-call $Chooser with filehandle
    SKIP - skip over the file and call $Chooser on the next one
    EXIT - skip and also stop further processing
 
-EDIT mode:
+B<EDIT mode:>
 
-the file will be copied to a temporary file and the filehandle passed to
-$Chooser.  It can truncate, rewrite, edit - whatever.  So long as it updates
-$header->{size} and returns it as $newheader it's all good.
+The file will be copied to a temporary file and the
+filehandle passed to $Chooser on a second call.  Your
+callback can truncate, rewrite, or inspect the contents.
+If you change the file, update C<< $header->{size} >> and
+return it as C<$newheader>.
 
-you don't have to change the file of course, it's also good just as a way to
-view the contents of some files as you stream them.
+You don't have to change the file of course; EDIT is also
+useful just to inspect file contents before deciding to
+KEEP or SKIP.
 
 A standard usage pattern looks like this:
 
   $ts->StreamCopy(sub {
-    my ($header, $outpos, $fs) = @_;
+    my ($header, $outpos, $fh) = @_;
 
-    # simple checks
+    # simple checks on the header alone
     return 'KEEP' if do_want($header);
     return 'SKIP' if dont_want($header);
 
+    # need to see the contents to decide
     return 'EDIT' unless $fh;
 
-    # checks that require a filehandle
+    # $fh is now a seekable filehandle with the contents
+    return 'KEEP' if looks_good($fh);
+    return 'SKIP';
   });
 
 =cut
@@ -413,12 +447,19 @@ Requires: infh
 
    my $header = $ts->ReadHeader(%Opts);
 
-Read a single 512 byte header off the input filehandle and
-convert it to a TARHEADER format hashref.  Returns undef
-at the end of the file.
+Read a single record header from the input filehandle and
+return it as a TARHEADER format hashref.  Returns undef
+at the end of the archive.
 
-If the option (SkipInvalid => 1) is passed, it will skip
-over blocks which fail to pass the checksum test.
+GNU long filename (typeflag C<L>) and long linkname
+(typeflag C<K>) extensions are consumed transparently:
+the returned header will have the full name/linkname
+already applied, and C<_pos> will point to the start of
+the first extension header.
+
+If the option C<< SkipInvalid => 1 >> is passed, blocks
+that fail the checksum test will be silently skipped
+rather than treated as end-of-archive.
 
 =cut
 
@@ -524,10 +565,12 @@ Requires: outfh
 
    my $newheader = $ts->WriteHeader($header);
 
-Write a single 512 byte header to the output filehandle.
+Write a header to the output filehandle.  If the name or
+linkname exceeds 100 bytes, GNU long name/link extension
+entries are emitted automatically before the header.
 
 Returns a copy of the header with _pos set to the position
-in the output file.
+of the main header in the output file.
 
 =cut
 
@@ -826,8 +869,9 @@ sub CopyFromFh {
 
    $ts->WriteFromFh($fh, $header);
 
-Adds the header and then calls CopyFromFh with the data from the
-filehandle
+Writes the header and file data from $fh to the output stream.
+If the name or linkname exceeds 100 bytes, GNU long name/link
+extension entries are emitted automatically before the header.
 
 =cut
 
@@ -849,8 +893,10 @@ sub WriteFromFh {
 
    $ts->WriteCopy($header);
 
-Streams the record which matches the given header directly from the input
-stream to the output stream.
+Streams the record which matches the given header directly
+from the input stream to the output stream.  If the name or
+linkname exceeds 100 bytes, GNU long name/link extension
+entries are emitted automatically before the header.
 
 =cut
 
@@ -885,44 +931,43 @@ sub WriteCopy {
 
 =head1 TARHEADER format
 
-This is the "BlankHeader" output, which includes all the fields
-in a standard tar header:
+Headers are represented as hashrefs with the following fields
+(these are the defaults from C<BlankHeader>):
 
-  my %hash = (
-    name => '',
-    mode => 0777,
-    uid => 0,
-    gid => 0,
-    size => 0,
-    mtime => time(),
-    typeflag => '0', # this is actually the STANDARD plain file format, phooey.  Not 'f' like Tar writes
-    linkname => '',
-    uname => '',
-    gname => '',
-    devmajor => 0,
-    devminor => 0,
-    prefix => '',
-  );
+  {
+    name     => '',        # file path (any length; L/K emitted automatically)
+    mode     => 0777,      # file permissions
+    uid      => 0,         # owner user id
+    gid      => 0,         # owner group id
+    size     => 0,         # file size in bytes
+    mtime    => time(),    # modification time (epoch seconds)
+    typeflag => '0',       # entry type (see below)
+    linkname => '',        # link target (any length; L/K emitted automatically)
+    uname    => '',        # owner user name
+    gname    => '',        # owner group name
+    devmajor => 0,         # device major number
+    devminor => 0,         # device minor number
+    prefix   => '',        # ustar path prefix (used internally)
+  }
 
-You can read more about the tar header format produced by this
-module on wikipedia:
-L<http://en.wikipedia.org/wiki/Tar_(file_format)#UStar_format>
-or here: L<http://www.mkssoftware.com/docs/man4/tar.4.asp>
+The on-disk format is POSIX ustar.  Filenames and link targets
+longer than 100 bytes are handled transparently using GNU tar
+long name extensions (typeflag C<L> and C<K>).
 
-Type flags:
+See L<https://en.wikipedia.org/wiki/Tar_(file_format)#UStar_format>
+for details on the ustar header layout.
 
-  '0' Normal file
-  (ASCII NUL) Normal file (now obsolete)
-  '1' Hard link
-  '2' Symbolic link
-  '3' Character special
-  '4' Block special
-  '5' Directory
-  '6' FIFO
-  '7' Contiguous file
+B<Type flags:>
 
-Obviously some module wrote 'f' as the type - I must have found
-that during original testing.  That's bogus though.
+  '0'         Normal file
+  (ASCII NUL) Normal file (V7 compat, obsolete)
+  '1'         Hard link
+  '2'         Symbolic link
+  '3'         Character special
+  '4'         Block special
+  '5'         Directory
+  '6'         FIFO
+  '7'         Contiguous file
 
 =head1 AUTHOR
 
@@ -930,12 +975,9 @@ Bron Gondwana, C<< <perlcode at brong.net> >>
 
 =head1 BUGS
 
-Please report any bugs or feature requests to C<bug-archive-tar-stream
-at rt.cpan.org>, or through the web interface at
-L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Archive-Tar-Stream>.
-I will be notified, and then you'll automatically be notified of progress
-on your bug as I make changes.
+Please report bugs and feature requests on GitHub:
 
+L<https://github.com/brong/Archive-Tar-Stream/issues>
 
 =head1 SUPPORT
 
@@ -943,36 +985,17 @@ You can find documentation for this module with the perldoc command.
 
     perldoc Archive::Tar::Stream
 
-
-You can also look for information at:
-
 =over 4
 
-=item * RT: CPAN's request tracker (report bugs here)
+=item * GitHub repository
 
-L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Archive-Tar-Stream>
+L<https://github.com/brong/Archive-Tar-Stream>
 
-=item * AnnoCPAN: Annotated CPAN documentation
+=item * MetaCPAN
 
-L<http://annocpan.org/dist/Archive-Tar-Stream>
-
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/Archive-Tar-Stream>
-
-=item * Search CPAN
-
-L<http://search.cpan.org/dist/Archive-Tar-Stream/>
+L<https://metacpan.org/dist/Archive-Tar-Stream>
 
 =back
-
-
-=head1 LATEST COPY
-
-The latest copy of this code, including development branches,
-can be found at
-
-http://github.com/brong/Archive-Tar-Stream/
 
 
 =head1 LICENSE AND COPYRIGHT
