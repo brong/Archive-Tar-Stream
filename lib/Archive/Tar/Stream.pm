@@ -662,8 +662,8 @@ sub DumpBytes {
 
    $ts->FinishTar();
 
-Writes 5 blocks of zero bytes to the output file, which makes
-gnu tar happy that it's found the end of the file.
+Writes 2 blocks of zero bytes to the output file to signal
+end-of-archive per the POSIX tar specification.
 
 Don't use this if you're planning on concatenating multiple
 files together.
@@ -672,9 +672,8 @@ files together.
 
 sub FinishTar {
   my $Self = shift;
-  # add 5 blocks of all zero - this seems to be expected by gnutar and it will complain
-  # if they're not there
-  $Self->WriteBlocks("", 5);
+  # two blocks of all zero marks end-of-archive per POSIX tar spec
+  $Self->WriteBlocks("", 2);
 }
 
 =head2 CopyToTempFile
