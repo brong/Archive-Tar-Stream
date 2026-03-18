@@ -15,7 +15,6 @@ use IO::Handle;
 use File::Temp;
 use List::Util qw(min);
 
-# XXX - make this an OO attribute
 our $VERBOSE = 0;
 
 =head1 NAME
@@ -108,6 +107,7 @@ sub new {
   my $Self = bless {
     # defaults
     safe_copy => 1,
+    verbose => 0,
     inpos => 0,
     outpos => 0,
     %args
@@ -277,7 +277,7 @@ sub StreamCopy {
       $header = $newheader if $newheader;
 
       if ($rc eq 'KEEP') {
-        print "KEEP $header->{name} $pos/$Self->{outpos}\n" if $VERBOSE;
+        print "KEEP $header->{name} $pos/$Self->{outpos}\n" if ($Self->{verbose} || $VERBOSE);
         if ($TempFile) {
           $Self->WriteFromFh($TempFile, $header);
         }
@@ -294,11 +294,11 @@ sub StreamCopy {
       # anything else means discard it
       elsif ($rc eq 'SKIP') {
         if ($TempFile) {
-          print "LATE REJECT $header->{name} $pos/$Self->{outpos}\n" if $VERBOSE;
+          print "LATE REJECT $header->{name} $pos/$Self->{outpos}\n" if ($Self->{verbose} || $VERBOSE);
           # $TempFile already contains the bytes
         }
         else {
-          print "DISCARD $header->{name} $pos/$Self->{outpos}\n" if $VERBOSE;
+          print "DISCARD $header->{name} $pos/$Self->{outpos}\n" if ($Self->{verbose} || $VERBOSE);
           $Self->DumpBytes($header->{size});
         }
       }
@@ -308,7 +308,7 @@ sub StreamCopy {
       }
     }
     else {
-      print "PASSTHROUGH $header->{name} $Self->{outpos}\n" if $VERBOSE;
+      print "PASSTHROUGH $header->{name} $Self->{outpos}\n" if ($Self->{verbose} || $VERBOSE);
       if ($Self->{safe_copy} and $header->{size}) {
         my $TempFile = $Self->CopyToTempFile($header->{size});
         $Self->WriteFromFh($TempFile, $header);
