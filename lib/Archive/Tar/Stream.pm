@@ -427,16 +427,33 @@ sub ReadHeader {
   my %Opts = @_;
 
   my ($pos, $header, $skipped) = (0, undef, 0);
+  my ($longname, $longlink);
 
   my $initialpos = $Self->{inpos};
   while (not $header) {
-    $pos = $Self->{inpos};
+    $pos = $Self->{inpos} unless defined $longname or defined $longlink;
     my $block = $Self->ReadBlocks();
     last unless $block;
-    $header = $Self->ParseHeader($block);
-    last if $header;
-    last unless $Opts{SkipInvalid};
-    $skipped++;
+    my $parsed = $Self->ParseHeader($block);
+    unless ($parsed) {
+      last unless $Opts{SkipInvalid};
+      $skipped++;
+      next;
+    }
+
+    # Handle GNU long name extension (typeflag 'L')
+    if ($parsed->{typeflag} eq 'L') {
+      $longname = $Self->_ReadLongName($parsed->{size});
+      next;
+    }
+
+    # Handle GNU long link extension (typeflag 'K')
+    if ($parsed->{typeflag} eq 'K') {
+      $longlink = $Self->_ReadLongName($parsed->{size});
+      next;
+    }
+
+    $header = $parsed;
   }
 
   return unless $header;
@@ -445,10 +462,60 @@ sub ReadHeader {
     warn "Skipped $skipped blocks - invalid headers at $initialpos\n";
   }
 
+  # Apply long names from GNU extensions
+  if (defined $longname) {
+    $header->{name} = $longname;
+  }
+  if (defined $longlink) {
+    $header->{linkname} = $longlink;
+  }
+
   $header->{_pos} = $pos;
   $Self->{last_header} = $header;
 
   return $header;
+}
+
+# Read the data blocks following a GNU 'L' or 'K' header and return
+# the long name as a string (without trailing NUL).
+sub _ReadLongName {
+  my $Self = shift;
+  my $size = shift;
+
+  my $nblocks = 1 + int(($size - 1) / BLOCKSIZE);
+  my $data = $Self->ReadBlocks($nblocks);
+  die "Failed to read long name data at $Self->{inpos}\n" unless defined $data;
+  $data = substr($data, 0, $size);
+  $data =~ s/\0+$//;
+  return $data;
+}
+
+# Write a GNU 'L' or 'K' long name entry (header + data blocks).
+sub _WriteLongEntry {
+  my ($Self, $typeflag, $value) = @_;
+
+  my $data = $value . "\0";
+  my $header = $Self->BlankHeader(
+    name => '././@LongLink',
+    typeflag => $typeflag,
+    size => length($data),
+  );
+  my $block = $Self->CreateHeader($header);
+  $Self->WriteBlocks($block);
+  my $nblocks = 1 + int((length($data) - 1) / BLOCKSIZE);
+  $Self->WriteBlocks($data, $nblocks);
+}
+
+# Emit GNU 'L'/'K' entries if name or linkname exceed 100 bytes.
+sub _WriteLongEntries {
+  my ($Self, $header) = @_;
+
+  if (length($header->{name}) > 100) {
+    $Self->_WriteLongEntry('L', $header->{name});
+  }
+  if (length($header->{linkname}) > 100) {
+    $Self->_WriteLongEntry('K', $header->{linkname});
+  }
 }
 
 =head2 WriteHeader
@@ -468,6 +535,7 @@ sub WriteHeader {
   my $Self = shift;
   my $header = shift;
 
+  $Self->_WriteLongEntries($header);
   my $block = $Self->CreateHeader($header);
   my $pos = $Self->WriteBlocks($block);
   return( {%$header, _pos => $pos} );
@@ -768,6 +836,7 @@ sub WriteFromFh {
   my $Fh = shift;
   my $header = shift;
 
+  $Self->_WriteLongEntries($header);
   my $pos = $Self->{outpos};
 
   my $block = $Self->CreateHeader($header);
@@ -789,6 +858,7 @@ sub WriteCopy {
   my $Self = shift;
   my $header = shift;
 
+  $Self->_WriteLongEntries($header);
   my $pos = $Self->{outpos};
 
   my $toread = $header->{size};
