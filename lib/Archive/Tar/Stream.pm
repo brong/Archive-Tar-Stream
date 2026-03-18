@@ -309,12 +309,13 @@ sub StreamCopy {
     }
     else {
       print "PASSTHROUGH $header->{name} $Self->{outpos}\n" if $VERBOSE;
-      # XXX - faster but less safe
-      #$Self->WriteCopy($header);
-
-      # slow safe option :)
-      my $TempFile = $Self->CopyToTempFile($header->{size});
-      $Self->WriteFromFh($TempFile, $header);
+      if ($Self->{safe_copy} and $header->{size}) {
+        my $TempFile = $Self->CopyToTempFile($header->{size});
+        $Self->WriteFromFh($TempFile, $header);
+      }
+      else {
+        $Self->WriteCopy($header);
+      }
     }
   }
 }
