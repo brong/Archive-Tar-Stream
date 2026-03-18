@@ -456,10 +456,7 @@ Requires: outfh
 
    my $newheader = $ts->WriteHeader($header);
 
-Read a single 512 byte header off the input filehandle.
-
-If the option (SkipInvalid => 1) is passed, it will skip
-over blocks which fail to pass the checksum test.
+Write a single 512 byte header to the output filehandle.
 
 Returns a copy of the header with _pos set to the position
 in the output file.
